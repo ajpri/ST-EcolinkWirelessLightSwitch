@@ -15,9 +15,12 @@
  */
  
  /*
+  Milestone 1 - September 6th, 2017
+  	Battery Reporting
+    Adjusted Ping Time to improve battery life.
   Draft 2 - September 2nd, 2017
  	Basic Functionality
- Draft 1 - August 27th, 2017
+  Draft 1 - August 27th, 2017
  	Initial Commit
     Untested 
  */
@@ -60,29 +63,27 @@ metadata {
 				attributeState "off", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff"
 			}
 		}
-
-		standardTile("indicator", "device.indicatorStatus", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-			state "when off", action:"indicator.indicatorWhenOn", icon:"st.indicators.lit-when-off"
-			state "when on", action:"indicator.indicatorNever", icon:"st.indicators.lit-when-on"
-			state "never", action:"indicator.indicatorWhenOff", icon:"st.indicators.never-lit"
+        valueTile("battery", "device.battery", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+			state "battery", label:'${currentValue}% battery', unit:""
 		}
 		standardTile("refresh", "device.switch", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
 			state "default", label:'', action:"refresh.refresh", icon:"st.secondary.refresh"
 		}
 
+
 		main "switch"
-		details(["switch","refresh"])
+		details(["switch","battery","refresh"])
 	}
 }
 
 def installed() {
-	// Device-Watch simply pings if no device events received for 32min(checkInterval)
-	sendEvent(name: "checkInterval", value: 2 * 15 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID])
+	// Device-Watch simply pings if no device events received for 482min(checkInterval)
+	sendEvent(name: "checkInterval", value: 2 * 4 * 60 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID])
 }
 
 def updated(){
-		// Device-Watch simply pings if no device events received for 32min(checkInterval)
-		sendEvent(name: "checkInterval", value: 2 * 15 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID])
+		// Device-Watch simply pings if no device events received for 482min(checkInterval)
+		sendEvent(name: "checkInterval", value: 2 * 4 * 60 * 60 + 2 * 60, displayed: false, data: [protocol: "zwave", hubHardwareId: device.hub.hardwareID])
   switch (ledIndicator) {
         case "on":
             indicatorWhenOn()
@@ -110,6 +111,7 @@ def getCommandClassVersions() {
 def parse(String description) {
 	def result = null
 	def cmd = zwave.parse(description, commandClassVersions)
+    //log.debug "Command: ${cmd}"
 	if (cmd) {
 		result = createEvent(zwaveEvent(cmd))
 	}
@@ -203,7 +205,8 @@ def ping() {
 def refresh() {
 	delayBetween([
 		zwave.switchBinaryV1.switchBinaryGet().format(),
-		zwave.manufacturerSpecificV1.manufacturerSpecificGet().format()
+		zwave.manufacturerSpecificV1.manufacturerSpecificGet().format(),
+        zwave.batteryV1.batteryGet().format()
 	])
 }
 
@@ -229,4 +232,18 @@ def invertSwitch(invert=true) {
 	else {
 		zwave.configurationV1.configurationSet(configurationValue: [0], parameterNumber: 4, size: 1).format()
 	}
+}
+
+def zwaveEvent(physicalgraph.zwave.commands.batteryv1.BatteryReport cmd) {
+	log.debug "Battery report received"
+	def nowTime = new Date().time
+	state.lastBatteryGet = nowTime
+	def map = [ name: "battery", unit: "%" ]
+	if (cmd.batteryLevel == 0xFF || cmd.batteryLevel == 0) {
+		map.value = 1
+		map.descriptionText = "$device.displayName battery is low!"
+    } else {
+		map.value = cmd.batteryLevel
+	}
+	map
 }
